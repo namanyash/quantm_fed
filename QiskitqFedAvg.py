@@ -12,6 +12,9 @@ import tensorflow as tf
 from tqdm import tqdm
 import optax
 import math
+import mpmath
+from qiskit.algorithms.optimizers import ADAM
+import functools
 
 n_world = 10
 
@@ -116,36 +119,29 @@ for node in range(n_node-1):
 
 print ("Processing done")
 
+
+def norm(x: np.ndarray) -> np.ndarray:
+    mpmath.mp.dps = 50
+    
+    # Convert numpy array to mpmath matrix
+    mp_matrix = mpmath.matrix(x.tolist())
+    
+    # Normalize the vector using mpmath arithmetic
+    norm_factor = mpmath.norm(mp_matrix, 2)  # L2 norm
+    normalized_mp_matrix = mp_matrix / norm_factor
+    
+    # Convert the mpmath matrix back to numpy array
+    normalized_x = np.array([float(entry) for row in normalized_mp_matrix.tolist() for entry in row]).ravel()
+    
+    return normalized_x
+
 ## Functions
 def clf(params, x, k):
     
     c = QuantumCircuit(n)
     
-    # Input
-    s = 0;
-    for val in x:
-        s += val*val
-    print(s)
+    c.initialize(norm(x).tolist())    
     
-    x = x / np.sqrt(np.sum(x**2, axis=-1, keepdims=True))
-
-    s = 0;
-    for val in x:
-        s += val*val
-    print(s)
-    # todo: Talk about the error QiskitError: 'Sum of amplitudes-squared does not equal one.' Sum was actually: 1.0000001181440479
-    # Same sum of squares after  x = x/np.linalg.norm(x)
-    
-    
-    
-    s = 0;
-    for val in x:
-        s += val*val
-    print(s)
-    
-    
-    c.initialize(x);
-            
     # Circuit gates
     for j in range(k):
         for i in range(n - 1):
@@ -158,15 +154,21 @@ def clf(params, x, k):
 
 def readout(qc):
     qc.measure_all()
-    print("readout start")
     compiled_circuit = transpile(qc, backend)
-    qobj = assemble(compiled_circuit)
-    result = backend.run(qobj).result()  ## shots 1024
-    print("result complete")
-
+    result = backend.run(compiled_circuit).result()  ## shots 1024
+    
     # Get the counts from the measurement
     counts = result.get_counts(qc)
-    print(counts)
+
+    # Calculate the expectation values for Z on each qubit
+    logits = []
+    for i in range(n):
+        expectation_z = (counts.get('0'*i+'0'+'0'*(n-i-1), 0) - counts.get('0'*i+'1'+'0'*(n-i-1), 0))/1024
+        logits.append(expectation_z)
+    logits = np.array(logits) * 10
+    ## Softmax
+    probs = np.exp(logits) / np.sum(np.exp(logits))
+    
     
     """
     expected_counts = np.zeros((128,8), dtype=int)
@@ -180,35 +182,67 @@ def readout(qc):
         scaling_factor = total_shots / total_values
         expected_counts = (expected_counts * scaling_factor).astype(int)
     """
-    return counts
     
+    
+    return probs
+
     
 def loss(params, x, y, k):
-    print("Loss start")
-    c = clf(params, x[0], k)
-    return readout(c)
+    c = clf(params, x, k)
+    probs = readout(c)
     
+    probs = np.clip(probs, 1e-7, 1-1e-7)
+    
+    # Compute cross-entropy loss
+    #loss = -np.mean(np.sum(y * np.log(probs) + (1 - y) * np.log(1 - probs))) > 3
+    loss   = -np.mean(np.sum(y * np.log(probs + 1e-7), axis=-1))
+    return loss
+
+def run_circuit(params, x, y, k):
+    params = params.reshape(144,8)
+    total_loss = 0
+    
+    for index in range(x.shape[0]):
+        total_loss += loss(params, x[index], y[index], k)
+    mean_loss = total_loss/x.shape[0]
+    return mean_loss
+
 
 loss_list = []
 acc_list = []
-for node in range(n_node-1):
-    try:
-        x, y = next(iter_list[node])
-    except StopIteration:
-        iter_list[node] = iter(data_list[node])
-        x, y = next(iter_list[node])
-    x = x.numpy()
-    y = y.numpy()
-    print("Shape of X array:", x.shape)
-    print("Shape of Y array:", y.shape)
-    
+optimizer = ADAM(maxiter=1000, lr=1e-2)
 
+for e in tqdm(range(5), leave=False):
+    for b in range(100):
+        for node in range(n_node-1):
+            try:
+                x, y = next(iter_list[node])
+            except StopIteration:
+                iter_list[node] = iter(data_list[node])
+                x, y = next(iter_list[node])
+            x = x.numpy()
+            y = y.numpy()
+            print("Shape of X array:", x.shape)
+            print("Shape of Y array:", y.shape)
+            
+            #a = x.reshape(-1)
+            #b = a.reshape(128,256)
+        
+        
+            partial_objective = functools.partial(run_circuit, x=x, y=y, k=k)
+        
+            params_optimized, loss_optimized, _ = optimizer.minimize(partial_objective, params_list[node].reshape(-1))
+            params_list[node] = params_optimized
+            print(f"Epoch {e}, batch {b}/{100}, Node {node}")
+            print(params_optimized)
+            print(loss_optimized)
+            print(("\n"))
+            
+    """
     # Shape of X array: (128, 256)
     # Shape of Y array: (128, 8)
     # Sum of squares of x  = 1;
-    
-    loss_value = loss(params_list[node], x, y, k)
-    print(loss_value)
+    """
     
     
 
