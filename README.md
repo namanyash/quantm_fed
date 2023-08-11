@@ -1,4 +1,4 @@
-# Quantum Federated Learning in Qiskit: Design and Implementation
+# Federated Quantum Machine Learning in Qiskit: Design and Implementation
 # Investigators: 
 - Shiva Pokhrel (shiva.pokhrel@deakin.edu.au)
 - Jonathan Kua
