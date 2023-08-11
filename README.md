@@ -4,6 +4,6 @@
 
 - Dr Jonathan Kua is a Lecturer in Internet of Things and Quantum Computing at Deakin University. He received his B.Eng. (First Class Hons.) degree in telecommunications and network engineering in 2014 and Ph.D. degree in telecommunications engineering in 2019, both from Swinburne University of Technology, Melbourne, Australia. He was previously affiliated with the Centre for Advanced Internet Architectures (2013-2017) and the Internet For Things Research Group (2017-2019), within Swinburne University of Technology. He was awarded a full Netflix Ph.D. scholarship to pursue applied research in high-performance Internet Protocol-based content delivery and adaptive streaming. His research was internationally recognized with a second runner-up of the DASH-IF Best Ph.D. Dissertation Award on "Algorithms and Protocols for Adaptive Content Delivery over the Internet" (2019), and commended locally with the Swinburne Outstanding Thesis Award (2019).
   
-- Naman Yash is a research intern at IoT Lab Deakin working on Quantum Federated Learning.
+- Naman Yash is a research intern at IoT Lab Deakin working on Federated Quantum Learning in Qiskit.
 
 
