@@ -1,7 +1,7 @@
 # Quantum Federated Learning: Analysis Design and Implementation
 # Investigators: 
--Dr Shiva Pokhrel (shiva.pokhrel@deakin.edu.au)
-- Dr Jonathan Kua
+- Shiva Pokhrel (shiva.pokhrel@deakin.edu.au)
+- Jonathan Kua
 - Naman Yash
 
 
