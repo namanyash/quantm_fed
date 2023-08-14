@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from jax import device_get
 from jax.experimental.host_callback import call
+from qiskit.quantum_info import Statevector, PauliExpectation, Pauli
 
 from sklearn.mixture import GaussianMixture
 
@@ -63,6 +64,7 @@ def clf(params, c, k):
             c.rz(i, theta=params[3 * j + 1, i])
             c.rx(i, theta=params[3 * j + 2, i])
     return c
+
 def readout(c):
     if readout_mode == 'softmax':
         logits = []
@@ -74,6 +76,8 @@ def readout(c):
         wf = jnp.abs(c.wavefunction()[:n_node])**2
         probs = wf / jnp.sum(wf)
     return probs
+
+
 
 def loss(params, x, y, k):
     print("Shape of X array:", x.shape)
@@ -184,12 +188,7 @@ if __name__ == '__main__':
                     x = x.numpy()
                     y = y.numpy()
                     loss_val, grad_val = compute_loss(params_list[node], x, y, k)
-                    print(loss_val)
-                    print(grad_val)
-                    print("Valls")
 
-                    grad_val = 0 
-                    opt_state_list = 0
                     updates, opt_state_list[node] = opt.update(grad_val, opt_state_list[node], params_list[node])
                     params_list[node] = optax.apply_updates(params_list[node], updates)
                 

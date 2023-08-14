@@ -10,11 +10,14 @@ from qiskit import QuantumCircuit, transpile, Aer, execute, assemble
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from tqdm import tqdm
-import optax
 import math
 import mpmath
-from qiskit.algorithms.optimizers import ADAM
-import functools
+from qiskit.algorithms.optimizers import ADAM, GradientDescent
+from qiskit import Aer, transpile
+from qiskit import transpile, QuantumCircuit
+from qiskit.quantum_info import SparsePauliOp, Pauli
+from qiskit_aer.primitives import Estimator
+
 
 n_world = 10
 
@@ -26,7 +29,8 @@ n_node = 8
 k = 48
 
 # backend = provider.get_backend('ibmq_qasm_simulator')
-backend = Aer.get_backend('qasm_simulator')
+# backend = Aer.get_backend('qasm_simulator')
+backend = Aer.get_backend('statevector_simulator')
 
 print("Start")
 if dataset == 'mnist':
@@ -95,10 +99,7 @@ for node in range(n_node-1):
     # Generate random numbers using NumPy
     subkey, _ = np.random.default_rng(key2).integers(0, 2**31, size=2)
     params = np.random.default_rng(subkey).normal(size=(3 * k, n))
-    opt = optax.adam(learning_rate=1e-2)
-    opt_state = opt.init(params)
     params_list.append(params)
-    opt_state_list.append(opt_state)
     
 
 ##### x_test (8017, 256) float32
@@ -137,11 +138,10 @@ def norm(x: np.ndarray) -> np.ndarray:
 
 ## Functions
 def clf(params, x, k):
-    
     c = QuantumCircuit(n)
     
     c.initialize(norm(x).tolist())    
-    
+
     # Circuit gates
     for j in range(k):
         for i in range(n - 1):
@@ -152,66 +152,123 @@ def clf(params, x, k):
             c.rx(params[3 * j + 2, i], i)
     return c
 
+
+def readout(qc, readout_mode='softmax', shots=4000):
+    compiled_circuit = transpile(qc, backend)
+    
+    
+    z_operators = [SparsePauliOp(Pauli('Z'*i + 'I' + 'Z'*(n-1-i))) for i in range(n)]
+
+    if readout_mode == 'softmax':
+        estimator = Estimator(run_options={"approximation": True, "shots": shots})
+        
+        # Repeat the compiled circuit for each observable
+        circuits = [compiled_circuit] * n
+        
+        expectation_values = estimator.run(circuits, z_operators).result().values
+        # Convert expectation values to real
+        logits = np.real(expectation_values)
+        
+        # Scale logits by 10
+        logits *= 10
+        
+        # Compute softmax
+        e_x = np.exp(logits - np.max(logits))
+        probs = e_x / e_x.sum()
+        
+    elif readout_mode == 'sample':
+        # Run the circuit to get the statevector
+        result = backend.run(compiled_circuit).result()
+        statevector = result.get_statevector()
+        
+        # Compute probabilities from the wavefunction
+        wf = np.abs(statevector[:n])**2
+        probs = wf / np.sum(wf)
+        
+    return probs
+    
+
+"""
 def readout(qc):
-    qc.measure_all()
     compiled_circuit = transpile(qc, backend)
     result = backend.run(compiled_circuit).result()  ## shots 1024
-    
+    qc.measure_all()
+
     # Get the counts from the measurement
     counts = result.get_counts(qc)
+    print(counts)
 
     # Calculate the expectation values for Z on each qubit
-    logits = []
-    for i in range(n):
-        expectation_z = (counts.get('0'*i+'0'+'0'*(n-i-1), 0) - counts.get('0'*i+'1'+'0'*(n-i-1), 0))/1024
-        logits.append(expectation_z)
-    logits = np.array(logits) * 10
-    ## Softmax
-    probs = np.exp(logits) / np.sum(np.exp(logits))
     
+    probs = np.array([counts[str(i)] for i in range(n_node)]) / sum(counts.values())
     
-    """
-    expected_counts = np.zeros((128,8), dtype=int)
 
-    for key, count in counts.items():
-        index = int(key, 2)  # Convert the binary key to an integer index
-        expected_counts[index] = count
-
-    total_values = sum(expected_counts)
-    if total_values != total_shots:
-        scaling_factor = total_shots / total_values
-        expected_counts = (expected_counts * scaling_factor).astype(int)
-    """
     
     
     return probs
+"""
+"""
+def readout(qc, shots=1024):
+  backend = Aer.get_backend('aer_simulator')
 
-    
+  if readout_mode == 'softmax':
+    logits = []
+    for i in range(n_node):
+      obs = Z(i)
+      expectation = np.real(expectation_value(qc, obs, backend=backend, shots=shots))
+      logits.append(expectation * 10)
+    probs = np.exp(logits) / np.sum(np.exp(logits))
+
+  elif readout_mode == 'sample':
+    job = execute(qc, backend=backend, shots=shots)
+    counts = job.result().get_counts()
+    states = [int(k, 2) for k in counts.keys()]
+    unique, counts = np.unique(states, return_counts=True)
+        
+    wf = np.zeros(2**n)
+    for state, count in zip(unique, counts):
+      wf[state] = count
+    wf = wf[:n_node]
+    probs = wf / np.sum(wf)
+        
+  return probs
+"""
+ 
+
+
+
 def loss(params, x, y, k):
     c = clf(params, x, k)
     probs = readout(c)
-    
-    probs = np.clip(probs, 1e-7, 1-1e-7)
-    
-    # Compute cross-entropy loss
-    #loss = -np.mean(np.sum(y * np.log(probs) + (1 - y) * np.log(1 - probs))) > 3
+
     loss   = -np.mean(np.sum(y * np.log(probs + 1e-7), axis=-1))
     return loss
 
+min_loss_so_far = 9999
+iteration = 0
 def run_circuit(params, x, y, k):
+    global iteration
+    global min_loss_so_far
     params = params.reshape(144,8)
     total_loss = 0
-    
     for index in range(x.shape[0]):
         total_loss += loss(params, x[index], y[index], k)
     mean_loss = total_loss/x.shape[0]
+    iteration += 1
+    print(iteration)
+    print("mean_loss")
+    print(mean_loss)
+    if(min_loss_so_far > mean_loss):
+      min_loss_so_far = mean_loss
+    if(iteration % 10 == 0 ):
+      print(min_loss_so_far)
     return mean_loss
 
 
 loss_list = []
 acc_list = []
 optimizer = ADAM(maxiter=1000, lr=1e-2)
-
+#optimizer = GradientDescent(maxiter=100)
 for e in tqdm(range(5), leave=False):
     for b in range(100):
         for node in range(n_node-1):
@@ -224,18 +281,23 @@ for e in tqdm(range(5), leave=False):
             y = y.numpy()
             print("Shape of X array:", x.shape)
             print("Shape of Y array:", y.shape)
+            run_circuit(params_list[node], x, y, k)
             
-            #a = x.reshape(-1)
-            #b = a.reshape(128,256)
-        
-        
-            partial_objective = functools.partial(run_circuit, x=x, y=y, k=k)
-        
-            params_optimized, loss_optimized, _ = optimizer.minimize(partial_objective, params_list[node].reshape(-1))
-            params_list[node] = params_optimized
-            print(f"Epoch {e}, batch {b}/{100}, Node {node}")
-            print(params_optimized)
-            print(loss_optimized)
+ #           #a = x.reshape(-1)
+ #           #b = a.reshape(128,256)
+ #       
+ #       
+ #           fixed_partial_objective = lambda params: run_circuit(params, x, y, k)
+ #           run_circuit(params_list[node], x, y, k)
+ #           run_circuit(params_list[node], x, y, k)
+ #           params_optimized, loss_optimized, _ = optimizer.minimize(fixed_partial_objective, params_list[node].reshape(-1))
+ #           params_list[node] = params_optimized
+ #           print(f"Epoch {e}, batch {b}/{100}, Node {node}")
+ #           
+ #           # Epoch 0, batch 0/100, loss 0.2736464738845825, accuracy 0.1142578125
+
+ #           print(params_optimized)
+ #           print(loss_optimized)
             print(("\n"))
             
     """
