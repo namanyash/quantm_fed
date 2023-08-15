@@ -150,6 +150,7 @@ def clf(params, x, k):
             c.rx(params[3 * j, i], i)
             c.rz(params[3 * j + 1, i], i)
             c.rx(params[3 * j + 2, i], i)
+    print(c)
     return c
 
 
