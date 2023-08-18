@@ -43,4 +43,8 @@ The tests and examples in `/test` can be run individually as needed.
 
 ## Diagrams
 
+The following diagram demonstrates the implementation of the qFedAvg algorithm utilizing Qiskit:
+![Code explanation diagram](https://github.com/namanyash/quantm_fed/blob/main/diagrams/CodeExp.png)
 
+The following diagram demonstrates the procedure for computing the loss within the optimization process of the designated loss function.
+![Loss function explanation diagram](https://github.com/namanyash/quantm_fed/blob/main/diagrams/circuit.png)
