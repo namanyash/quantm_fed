@@ -10,9 +10,11 @@
 
 # Quantum Federated Learning Implementations
 
-This repository contains implementations of the quantum federated learning algorithm described in [this paper](https://arxiv.org/abs/2209.00768) using Qiskit and Cirq.
+This repository contains implementations of the quantum federated learning algorithm: [this paper](https://arxiv.org/abs/2209.00768) using Qiskit and Cirq.
 
-The original [code from the paper](https://github.com/haimengzhao/quantum-fed-infer) uses TensorCircuit, but we have reimplemented it using other frameworks to run on different quantum cloud platforms.
+The original [code from the paper](https://github.com/haimengzhao/quantum-fed-infer) uses TensorCircuit.
+
+## Nontrivial Challenges
 
 ## Contents
 
