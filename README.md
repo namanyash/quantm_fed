@@ -38,3 +38,7 @@ The tests and examples in `/test` can be run individually as needed.
 - Cirq
 - Python 3
 - Packages to be listed in `requirements.txt` (to be added)
+
+## Diagrams
+
+
